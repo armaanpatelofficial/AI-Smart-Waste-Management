@@ -4,6 +4,9 @@
 > Swachh Bharat Mission 2.0 · Smart Cities Initiative · Government of India
 
 ---
+## 📌 System Architecture
+
+![Architecture](./assets/architecture.png)
 
 ## 📁 Project Structure
 
