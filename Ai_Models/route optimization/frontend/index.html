@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🚛 Waste Routing Dashboard</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body { margin:0; }
+    #map { height:100vh; }
+
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="legend">
+  <b>Bins</b><br>
+  🔴 High (>80%)<br>
+  🟠 Medium<br>
+  🟢 Low<br>
+  🚛 Truck
+</div>
+
+<script>
+var map = L.map('map').setView([28.560, 77.240], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// 🚛 Truck icon
+var truckIcon = L.icon({
+    iconUrl: 'https://cdn-icons-png.flaticon.com/512/1995/1995504.png',
+    iconSize: [40,40]
+});
+
+var truckMarker = L.marker([28.560,77.240], {icon: truckIcon}).addTo(map);
+
+// 🔵 Route line (THICK + visible)
+var routeLine = L.polyline([], {
+    color:'blue',
+    weight:8,
+    opacity:0.9
+}).addTo(map);
+
+var binMarkers = {};
+
+// The route optimization FastAPI server runs on port 8001 (separate from
+// the YOLO Flask server on 8000).
+var API_URL = "http://127.0.0.1:8001/live";
+
+async function updateMap(){
+    let data;
+    try {
+        let res = await fetch(API_URL);
+        if (!res.ok) {
+            console.error("Server error:", res.status, res.statusText);
+            return;
+        }
+        data = await res.json();
+    } catch (err) {
+        console.error("Fetch failed:", err.message);
+        return;
+    }
+
+    // 🚛 Update truck position
+    truckMarker.setLatLng([data.truck.lat, data.truck.lng]);
+
+    // 🛣️ Update route polyline
+    routeLine.setLatLngs(data.route);
+    if (data.route && data.route.length > 0) {
+        map.fitBounds(routeLine.getBounds());
+    }
+
+    // 🗑️ Update bin markers — recreate each time so fill color always reflects
+    // the latest data (setStyle cannot reliably update color after creation).
+    data.bins.forEach(b => {
+        let color = b.fill > 80 ? "red" : b.fill > 50 ? "orange" : "green";
+
+        if (binMarkers[b.id]) {
+            // Remove old marker and redraw with updated color
+            binMarkers[b.id].remove();
+        }
+
+        binMarkers[b.id] = L.circleMarker([b.lat, b.lng], {
+            color:       color,
+            fillColor:   color,
+            radius:      10,
+            fillOpacity: 0.8,
+            weight:      2,
+        })
+        .addTo(map)
+        .bindPopup(`<b>Bin ${b.id}</b><br>Fill: ${b.fill}%<br>Weight: ${b.weight} kg`);
+    });
+}
+
+// Run immediately, then poll every 5 seconds
+updateMap();
+setInterval(updateMap, 5000);
+</script>
+
+</body>
+</html>
